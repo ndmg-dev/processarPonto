@@ -1,0 +1,24 @@
+# Python / Backend
+backend/venv/
+backend/__pycache__/
+backend/*.pyc
+backend/.env
+backend/app/storage/uploads/*
+!backend/app/storage/uploads/.gitkeep
+backend/app/storage/reports/*
+!backend/app/storage/reports/.gitkeep
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / Outros
+.vscode/
+.idea/
+fix.py
