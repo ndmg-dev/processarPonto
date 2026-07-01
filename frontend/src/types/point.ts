@@ -32,6 +32,11 @@ export type EmployeeSummary = {
   absence_days: number;
   medical_days: number;
   inconsistencies: number;
+  extra_hours_50: string;
+  extra_hours_100: string;
+  delay_hours: string;
+  absence_hours: string;
+  early_exit_hours: string;
 };
 
 export type Employee = {

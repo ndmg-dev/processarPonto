@@ -36,6 +36,11 @@ class EmployeeSummary(BaseModel):
     absence_days: int = 0
     medical_days: int = 0
     inconsistencies: int = 0
+    extra_hours_50: str = "00:00"
+    extra_hours_100: str = "00:00"
+    delay_hours: str = "00:00"
+    absence_hours: str = "00:00"
+    early_exit_hours: str = "00:00"
 
 class Employee(BaseModel):
     id: str

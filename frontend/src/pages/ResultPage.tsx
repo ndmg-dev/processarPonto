@@ -4,7 +4,7 @@ import { getUploadResult, generateReport } from '../api/client';
 import type { UploadResult } from '../types/point';
 import { SummaryCards } from '../components/SummaryCards';
 import { EmployeeCard } from '../components/EmployeeCard';
-import { Download, ArrowLeft, Search } from 'lucide-react';
+import { Download, ArrowLeft, Search, FileDown } from 'lucide-react';
 
 export function ResultPage() {
   const { uploadId } = useParams<{ uploadId: string }>();
@@ -37,11 +37,27 @@ export function ResultPage() {
   };
 
   if (loading) {
-    return <div className="flex justify-center items-center h-64"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-secondary"></div></div>;
+    return (
+      <div className="flex flex-col justify-center items-center h-[50vh] gap-4">
+        <div className="relative w-12 h-12">
+          <div className="absolute inset-0 rounded-full border-2 border-zinc-800" />
+          <div className="absolute inset-0 rounded-full border-2 border-t-primary border-r-primary animate-spin" />
+        </div>
+        <p className="text-sm text-textSecondary font-medium font-mono tracking-wider animate-pulse">Carregando painel consolidado...</p>
+      </div>
+    );
   }
 
   if (!data) {
-    return <div className="text-center mt-20 text-red-500 font-bold text-xl">Dados não encontrados.</div>;
+    return (
+      <div className="text-center py-20 animate-fadeIn">
+        <div className="text-error text-xl font-bold mb-3">Dados não encontrados</div>
+        <p className="text-textSecondary text-sm mb-6">O link pode ser inválido ou o arquivo expirou.</p>
+        <Link to="/" className="inline-flex items-center gap-2 text-primary hover:underline">
+          <ArrowLeft size={16} /> Voltar para o início
+        </Link>
+      </div>
+    );
   }
 
   // Calculate totals
@@ -60,25 +76,32 @@ export function ResultPage() {
   });
 
   return (
-    <div className="space-y-8">
-      <div className="flex justify-between items-center">
+    <div className="space-y-8 animate-fadeIn">
+      {/* Top Bar with actions */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <Link to="/" className="flex items-center gap-2 text-secondary hover:underline mb-2">
-            <ArrowLeft size={20} /> Voltar
+          <Link to="/" className="inline-flex items-center gap-1.5 text-xs font-semibold text-textSecondary hover:text-white mb-3 transition-colors group">
+            <ArrowLeft size={14} className="transition-transform group-hover:-translate-x-0.5" /> Voltar
           </Link>
-          <h2 className="text-3xl font-bold text-primary">Resultado do Processamento</h2>
-          <p className="text-gray-500">Arquivo: <span className="font-medium">{data.file_name}</span></p>
+          <h2 className="text-2xl font-bold font-display text-white mb-1">
+            Resultado do Processamento
+          </h2>
+          <p className="text-xs text-textSecondary">
+            Arquivo processado: <span className="font-mono text-zinc-300 font-semibold">{data.file_name}</span>
+          </p>
         </div>
+        
         <button
           onClick={handleGenerateReport}
           disabled={reportLoading}
-          className="flex items-center gap-2 bg-secondary text-white px-5 py-2.5 rounded-lg font-bold shadow-md hover:bg-blue-700 hover:shadow-lg transition-all disabled:opacity-50"
+          className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-gold-gradient text-background px-6 py-3 rounded-xl font-bold font-display text-xs tracking-wider uppercase transition-all duration-300 hover:bg-gold-gradient-hover active:scale-[0.98] shadow-md hover:shadow-lg disabled:opacity-50 select-none cursor-pointer"
         >
-          <Download size={20} />
-          {reportLoading ? 'Gerando...' : 'Baixar Relatório PDF'}
+          <FileDown size={16} />
+          {reportLoading ? 'Gerando Relatório...' : 'Baixar Relatório Completo'}
         </button>
       </div>
 
+      {/* Summary Analytics Cards */}
       <SummaryCards 
         totalEmployees={data.total_employees}
         totalRecords={totalRecords}
@@ -88,17 +111,22 @@ export function ResultPage() {
         inconsistencies={inconsistencies}
       />
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-primary">Colaboradores</h3>
-          <div className="relative w-72">
-            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-gray-400">
-              <Search size={18} />
+      {/* Employees Section */}
+      <div className="bg-card rounded-2xl border border-zinc-800/80 shadow-premium p-6 md:p-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+          <div>
+            <h3 className="text-lg font-bold font-display text-white">Colaboradores</h3>
+            <p className="text-xs text-textSecondary mt-0.5">Clique em um colaborador para ver seus registros individuais.</p>
+          </div>
+          
+          <div className="relative w-full sm:w-80">
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3.5 pointer-events-none text-zinc-500">
+              <Search size={16} />
             </div>
             <input 
               type="text" 
-              placeholder="Buscar nome, CPF ou cargo..." 
-              className="bg-gray-50 border border-gray-300 text-gray-900 text-sm rounded-lg focus:ring-secondary focus:border-secondary block w-full pl-10 p-2.5"
+              placeholder="Buscar colaborador, CPF ou cargo..." 
+              className="bg-zinc-950/80 border border-zinc-800 text-white text-xs rounded-xl focus:ring-1 focus:ring-primary focus:border-primary block w-full pl-10 pr-4 py-3 placeholder:text-zinc-600 transition-all font-sans"
               value={search}
               onChange={e => setSearch(e.target.value)}
             />
@@ -106,9 +134,11 @@ export function ResultPage() {
         </div>
 
         {filteredEmployees.length === 0 ? (
-          <div className="text-center py-10 text-gray-500">Nenhum colaborador encontrado com esse termo.</div>
+          <div className="text-center py-12 text-xs text-textSecondary font-mono border border-dashed border-zinc-850 rounded-xl">
+            Nenhum colaborador corresponde aos critérios de busca.
+          </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredEmployees.map(emp => (
               <EmployeeCard key={emp.id} employee={emp} uploadId={data.upload_id} />
             ))}

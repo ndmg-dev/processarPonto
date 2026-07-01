@@ -1,19 +1,184 @@
-@import \"tailwindcss\";
+@import "tailwindcss";
 
 @theme {
-  --color-primary: #111827;
-  --color-secondary: #2563EB;
-  --color-success: #16A34A;
-  --color-warning: #F59E0B;
-  --color-error: #DC2626;
-  --color-background: #F3F4F6;
-  --color-card: #FFFFFF;
-  --color-textPrimary: #111827;
-  --color-textSecondary: #6B7280;
+  --color-primary: #DFBA73;        /* Brushed Metallic Gold */
+  --color-primary-hover: #C5A880;  /* Muted Gold */
+  --color-secondary: #cbd5e1;      /* Platinum Silver */
+  --color-background: #0A0A0C;     /* Deep Black */
+  --color-card: #131316;           /* Premium Dark Charcoal Card */
+  --color-textPrimary: #FAFAFA;     /* Pure Off-white */
+  --color-textSecondary: #A1A1AA;   /* Zinc Muted Gray */
+  --color-success: #10B981;        /* Emerald Green */
+  --color-warning: #F59E0B;        /* Warm Amber */
+  --color-error: #EF4444;          /* Crimson Red */
+  
+  --font-sans: 'Plus Jakarta Sans', sans-serif;
+  --font-display: 'Outfit', sans-serif;
+  
+  --shadow-premium: 0 10px 30px -10px rgba(0, 0, 0, 0.7), 0 1px 1px 0 rgba(223, 186, 115, 0.1) inset;
+  --shadow-premium-hover: 0 20px 40px -15px rgba(0, 0, 0, 0.8), 0 1px 2px 0 rgba(223, 186, 115, 0.25) inset;
 }
 
 @layer base {
   body {
-    @apply bg-background text-textPrimary antialiased;
+    @apply bg-background text-textPrimary antialiased font-sans selection:bg-primary selection:text-background;
+    background-image: 
+      radial-gradient(circle at 10% 20%, rgba(223, 186, 115, 0.04) 0%, transparent 40%),
+      radial-gradient(circle at 90% 80%, rgba(203, 213, 225, 0.02) 0%, transparent 40%);
+    background-attachment: fixed;
+  }
+  
+  /* Scrollbar Customization */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #0A0A0C;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #1e1e24;
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #DFBA73;
+  }
+}
+
+@utility text-gold-gradient {
+  background: linear-gradient(135deg, #FFE3A8 0%, #DFBA73 50%, #A27E36 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+@utility bg-gold-gradient {
+  background: linear-gradient(135deg, #FFE3A8 0%, #DFBA73 50%, #A27E36 100%);
+}
+
+@utility bg-gold-gradient-hover {
+  background: linear-gradient(135deg, #FFF0D0 0%, #E7C986 50%, #B89346 100%);
+}
+
+@utility bg-silver-gradient {
+  background: linear-gradient(135deg, #FFFFFF 0%, #cbd5e1 50%, #94A3B8 100%);
+}
+
+@utility border-gold-gradient {
+  border-image: linear-gradient(135deg, #DFBA73, #A27E36) 1;
+}
+
+@utility border-silver-gradient {
+  border-image: linear-gradient(135deg, #cbd5e1, #64748b) 1;
+}
+
+/* ────────────────────────────────────────────────────────── */
+/* ESTILOS DE IMPRESSÃO (RELATÓRIO INDIVIDUAL) */
+/* ────────────────────────────────────────────────────────── */
+@media print {
+  /* Ocultar elementos desnecessários na folha */
+  header, footer, .no-print, button, a {
+    display: none !important;
+  }
+  
+  /* Resetar fundos e margens para folha A4 branca */
+  body, html, #root, main {
+    background: #ffffff !important;
+    color: #000000 !important;
+    background-image: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+  
+  /* Forçar que as caixas tenham fundo claro e textos contrastantes */
+  .bg-card {
+    background: #ffffff !important;
+    border-color: #e4e4e7 !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+  }
+  
+  /* Cores de textos principais */
+  .text-white, h2, h3, h4, p, span, div, strong, td, th {
+    color: #000000 !important;
+  }
+  
+  .text-textSecondary, .text-zinc-500, .text-zinc-400, .text-zinc-300 {
+    color: #4b5563 !important;
+  }
+  
+  /* Melhorar a visualização de tabelas na impressão */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+    background-color: #ffffff !important;
+  }
+  
+  table, th, td {
+    border: 1px solid #d1d5db !important;
+    color: #000000 !important;
+  }
+  
+  th {
+    background-color: #f3f4f6 !important;
+    font-weight: bold !important;
+  }
+  
+  td {
+    background-color: #ffffff !important;
+  }
+  
+  /* Cores de Alertas para impressão */
+  .text-error {
+    color: #dc2626 !important;
+    font-weight: bold !important;
+  }
+  .text-warning {
+    color: #d97706 !important;
+    font-weight: bold !important;
+  }
+  .text-success {
+    color: #16a34a !important;
+    font-weight: bold !important;
+  }
+  .text-primary {
+    color: #b45309 !important;
+    font-weight: bold !important;
+  }
+  
+  /* Estilo para caixas internas (Estatísticas, listagens, etc) */
+  .bg-zinc-950\/60, .bg-zinc-950\/45, .bg-zinc-950\/40, .bg-black\/25, .bg-black\/20, .bg-zinc-900\/20, .bg-zinc-950\/40 {
+    background: #f9fafb !important;
+    border: 1px solid #e5e7eb !important;
+    color: #000000 !important;
+  }
+  
+  /* Mini cards de estatísticas */
+  .bg-error\/5, .bg-warning\/5, .bg-success\/5, .bg-blue-500\/5, .bg-indigo-500\/5, .bg-zinc-900\/20 {
+    background: #f9fafb !important;
+    border: 1px solid #e5e7eb !important;
+  }
+  
+  /* Forçar que as listagens caibam em largura total */
+  .grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 0.5rem !important;
+  }
+
+  @media (min-width: 1024px) {
+    .grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    }
+  }
+  
+  /* Garantir que quebras de página não ocorram no meio de uma linha de tabela */
+  tr {
+    page-break-inside: avoid !important;
+  }
+  
+  /* Ocultar sombras e gradientes */
+  .shadow-premium, .shadow-sm, .shadow-md, .shadow-lg {
+    box-shadow: none !important;
   }
 }
