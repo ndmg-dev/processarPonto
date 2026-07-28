@@ -6,11 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 import json
 
 from app.models.schemas import UploadResult
-from app.services.pdf_reader import extract_pages_text
+from app.services.pdf_reader import extract_pages_text, extract_pages_words
 from app.services.parser import parse_pdf_pages
 from app.services.report_generator import generate_pdf_report
 
-app = FastAPI(title="Processamento de Ponto Eletrônico")
+app = FastAPI(title="Processar Ponto")
 
 # CORS
 app.add_middleware(
@@ -44,7 +44,8 @@ async def upload_file(file: UploadFile = File(...)):
         
     try:
         pages_text = extract_pages_text(file_path)
-        employees = parse_pdf_pages(pages_text)
+        pages_words = extract_pages_words(file_path)
+        employees = parse_pdf_pages(pages_text, pages_words)
         
         result = {
             "upload_id": upload_id,

@@ -20,6 +20,7 @@ export type PointRecord = {
   second_period_exit: string;
   occurrence: string;
   reason: string;
+  night_additional: string;
   status: PointStatus;
   requires_second_period: boolean;
   has_missing_required_mark: boolean;
@@ -32,11 +33,7 @@ export type EmployeeSummary = {
   absence_days: number;
   medical_days: number;
   inconsistencies: number;
-  extra_hours_50: string;
-  extra_hours_100: string;
-  delay_hours: string;
-  absence_hours: string;
-  early_exit_hours: string;
+  night_additional_total: string;
 };
 
 export type Employee = {
