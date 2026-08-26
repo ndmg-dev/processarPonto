@@ -78,8 +78,64 @@ export function EmployeeDetailPage() {
       </div>
 
       <div className="mt-8">
+        <h3 className="text-2xl font-bold text-textPrimary mb-4">Resumo de Horas</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="bg-card rounded-2xl shadow-sm border border-border p-5 space-y-3">
+            <SummaryRow label="Horas Normais" value={summary.normal_hours} />
+            <SummaryRow label="DSR Normais" value={summary.dsr_normal} />
+            <SummaryRow label="Total Semanal" value={summary.weekly_total} />
+            <SummaryRow label="Adc Noturno" value={summary.night_additional_total} />
+            <SummaryRow label="Tot Descontado" value={summary.discounted_total} />
+          </div>
+
+          <div className="bg-card rounded-2xl shadow-sm border border-border p-5 space-y-3">
+            <div className="flex justify-between text-xs font-bold text-textSecondary uppercase pb-2 border-b border-border">
+              <span></span>
+              <div className="flex gap-6">
+                <span>Pagos</span>
+                <span>Desc.</span>
+              </div>
+            </div>
+            <SummaryPairRow label="H. Trab." paid={summary.worked_hours_paid} />
+            <SummaryPairRow label="DSR" paid={summary.dsr_paid} discount={summary.dsr_discount} />
+            <SummaryPairRow label="Atrasos" discount={summary.delays} />
+            <SummaryPairRow label="Faltas" discount={summary.absences_time} />
+            <SummaryPairRow label="Saídas Antecipadas" discount={summary.early_departures} />
+          </div>
+
+          <div className="bg-card rounded-2xl shadow-sm border border-border p-5 space-y-3">
+            <SummaryRow label="H.E. 050%" value={summary.overtime_50} />
+            {summary.overtime_extra_label && (
+              <SummaryRow label={summary.overtime_extra_label} value={summary.overtime_extra_value} />
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-8">
         <h3 className="text-2xl font-bold text-textPrimary mb-4">Registros Diários</h3>
         <RecordsTable records={employee.records} />
+      </div>
+    </div>
+  );
+}
+
+function SummaryRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-sm text-textSecondary">{label}</span>
+      <span className="text-sm font-bold text-textPrimary">{value}</span>
+    </div>
+  );
+}
+
+function SummaryPairRow({ label, paid, discount }: { label: string; paid?: string; discount?: string }) {
+  return (
+    <div className="flex justify-between items-center">
+      <span className="text-sm text-textSecondary">{label}</span>
+      <div className="flex gap-6">
+        <span className="text-sm font-bold text-textPrimary w-12 text-right">{paid ?? '-'}</span>
+        <span className="text-sm font-bold text-textPrimary w-12 text-right">{discount ?? '-'}</span>
       </div>
     </div>
   );

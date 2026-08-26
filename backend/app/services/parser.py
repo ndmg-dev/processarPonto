@@ -4,6 +4,8 @@ from app.models.schemas import PointStatus
 
 CPF_REGEX = r"\d{3}\.\d{3}\.\d{3}-\d{2}"
 TIME_REGEX = r"^\d{2}:\d{2}$"
+# Totais acumulados (ex: "188:00", "012:11") podem ter 3 dígitos de hora.
+TOTAL_TIME_REGEX = r"^\d{2,3}:\d{2}$"
 WEEKDAY_REGEX = r"^(Seg|Ter|Qua|Qui|Sex|Sab|Sáb|Dom)$"
 DATE_REGEX = r"^\d{2}/\d{2}$"
 SCHEDULE_MAP_REGEX = r"(\d{4})\s+-\s+((?:\d{2}:\d{2}\s*)+)"
@@ -20,6 +22,19 @@ COL_OCCURRENCE = (505, 533)
 COL_REASON_MIN = 533
 
 NIGHT_ADDITIONAL_VALUE_X = (115, 155)
+
+# Faixas de coordenada X do bloco "RESUMO" no rodapé do espelho. O bloco tem
+# três colunas de rótulo (A, B, C), cada uma com sua(s) coluna(s) de valor à
+# direita, alinhadas por Y com o respectivo rótulo.
+RESUMO_COL_A_LABEL_X = (25, 90)
+RESUMO_COL_A_VALUE_X = (115, 165)
+
+RESUMO_COL_B_LABEL_X = (180, 250)
+RESUMO_COL_B_PAGOS_X = (255, 295)
+RESUMO_COL_B_DESC_X = (295, 330)
+
+RESUMO_COL_C_LABEL_X = (340, 390)
+RESUMO_COL_C_VALUE_X = (385, 420)
 
 def time_to_minutes(time_str: str) -> int:
     if not time_str:
@@ -84,9 +99,115 @@ def extract_night_additional_total(words: list[tuple]) -> str:
     for w in words:
         x0, y0, text = w[0], w[1], w[4]
         if NIGHT_ADDITIONAL_VALUE_X[0] <= x0 <= NIGHT_ADDITIONAL_VALUE_X[1] and abs(y0 - label_y) < 1.5:
-            if re.match(TIME_REGEX, text):
+            if re.match(TOTAL_TIME_REGEX, text):
                 return text
     return "00:00"
+
+def _extract_field_value(words: list[tuple], label_y: float, value_x_range: tuple, y_tolerance: float = 2.0) -> str:
+    for w in words:
+        x0, y0, text = w[0], w[1], w[4]
+        if value_x_range[0] <= x0 <= value_x_range[1] and abs(y0 - label_y) < y_tolerance:
+            if re.match(TOTAL_TIME_REGEX, text):
+                return text
+    return "00:00"
+
+def _extract_label_text(words: list[tuple], label_y: float, x_range: tuple, y_tolerance: float = 2.0) -> str:
+    """
+    Reconstrói o texto do rótulo (ex: "H.E. 100%", "H.E. A 050%") juntando as
+    palavras da linha dentro da faixa X do rótulo, ignorando o ":" separador.
+    """
+    row_words = [
+        w for w in words
+        if x_range[0] <= w[0] <= x_range[1] and abs(w[1] - label_y) < y_tolerance and w[4] != ":"
+    ]
+    return " ".join(w[4] for w in sorted(row_words, key=lambda w: w[0]))
+
+def _find_label_y(words: list[tuple], label_text: str, x_range: tuple, y_min: float = None, y_max: float = None) -> float | None:
+    for w in words:
+        x0, y0, text = w[0], w[1], w[4]
+        if text != label_text:
+            continue
+        if not (x_range[0] <= x0 <= x_range[1]):
+            continue
+        if y_min is not None and y0 < y_min:
+            continue
+        if y_max is not None and y0 > y_max:
+            continue
+        return y0
+    return None
+
+def extract_resumo_fields(words: list[tuple]) -> dict:
+    """
+    Extrai os campos do bloco "RESUMO" no rodapé do espelho de ponto (Horas
+    Normais, DSR Normais, Total Semanal, Tot Descontado, H. Trab./DSR/Atrasos/
+    Faltas/Saídas Antecipadas em Pagos e Desc., H.E. 050% e a segunda linha de
+    hora extra, cujo rótulo varia por colaborador/período: "H.E. A 050%" ou
+    "H.E. 100%"). Assim como o Adc Noturno, cada rótulo tem seu valor correspondente na
+    mesma altura (Y), numa coluna de valores à direita; quando o valor é zero
+    a célula fica em branco e o campo retorna "00:00".
+    """
+    fields = {
+        "normal_hours": "00:00",
+        "dsr_normal": "00:00",
+        "weekly_total": "00:00",
+        "discounted_total": "00:00",
+        "worked_hours_paid": "00:00",
+        "dsr_paid": "00:00",
+        "dsr_discount": "00:00",
+        "delays": "00:00",
+        "absences_time": "00:00",
+        "early_departures": "00:00",
+        "overtime_50": "00:00",
+        "overtime_extra_label": "",
+        "overtime_extra_value": "00:00",
+    }
+
+    resumo_y = None
+    for w in words:
+        if w[4] == "RESUMO":
+            resumo_y = w[1]
+            break
+    if resumo_y is None:
+        return fields
+
+    # Só considera palavras a partir do início do bloco RESUMO, para não
+    # colidir com rótulos homônimos usados em outras partes do espelho.
+    resumo_words = [w for w in words if w[1] >= resumo_y - 2]
+
+    # Coluna A (rótulo à esquerda / valor único à direita)
+    if (y := _find_label_y(resumo_words, "Horas", RESUMO_COL_A_LABEL_X)) is not None:
+        fields["normal_hours"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
+    if (y := _find_label_y(resumo_words, "DSR", RESUMO_COL_A_LABEL_X)) is not None:
+        fields["dsr_normal"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
+    if (y := _find_label_y(resumo_words, "Total", RESUMO_COL_A_LABEL_X)) is not None:
+        fields["weekly_total"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
+    if (y := _find_label_y(resumo_words, "Tot", RESUMO_COL_A_LABEL_X)) is not None:
+        fields["discounted_total"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
+
+    # Coluna B (rótulo central / colunas de valor "Pagos" e "Desc." à direita)
+    if (y := _find_label_y(resumo_words, "H.", RESUMO_COL_B_LABEL_X)) is not None:
+        fields["worked_hours_paid"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_PAGOS_X)
+    if (y := _find_label_y(resumo_words, "DSR", RESUMO_COL_B_LABEL_X)) is not None:
+        fields["dsr_paid"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_PAGOS_X)
+        fields["dsr_discount"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
+    if (y := _find_label_y(resumo_words, "Atrasos", RESUMO_COL_B_LABEL_X)) is not None:
+        fields["delays"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
+    if (y := _find_label_y(resumo_words, "Faltas", RESUMO_COL_B_LABEL_X)) is not None:
+        fields["absences_time"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
+    if (y := _find_label_y(resumo_words, "Saídas", RESUMO_COL_B_LABEL_X)) is not None:
+        fields["early_departures"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
+
+    # Coluna C (Horas Extras). A primeira linha é sempre "H.E. 050%"; a
+    # segunda linha (quando existe) varia entre "H.E. A 050%" e "H.E. 100%"
+    # conforme o colaborador/período, então o rótulo é lido dinamicamente em
+    # vez de fixado.
+    if (y := _find_label_y(resumo_words, "H.E.", RESUMO_COL_C_LABEL_X)) is not None:
+        fields["overtime_50"] = _extract_field_value(resumo_words, y, RESUMO_COL_C_VALUE_X)
+        if (y2 := _find_label_y(resumo_words, "H.E.", RESUMO_COL_C_LABEL_X, y_min=y + 5)) is not None:
+            fields["overtime_extra_value"] = _extract_field_value(resumo_words, y2, RESUMO_COL_C_VALUE_X)
+            fields["overtime_extra_label"] = _extract_label_text(resumo_words, y2, RESUMO_COL_C_LABEL_X)
+
+    return fields
 
 def group_words_into_rows(words: list[tuple], y_tolerance: float = 3.0) -> list[list[tuple]]:
     sorted_words = sorted(words, key=lambda w: (w[1], w[0]))
@@ -197,7 +318,20 @@ def parse_employee_page(page_text: str, words: list[tuple]) -> dict:
             "absence_days": 0,
             "medical_days": 0,
             "inconsistencies": 0,
-            "night_additional_total": "00:00"
+            "night_additional_total": "00:00",
+            "normal_hours": "00:00",
+            "dsr_normal": "00:00",
+            "weekly_total": "00:00",
+            "discounted_total": "00:00",
+            "worked_hours_paid": "00:00",
+            "dsr_paid": "00:00",
+            "dsr_discount": "00:00",
+            "delays": "00:00",
+            "absences_time": "00:00",
+            "early_departures": "00:00",
+            "overtime_50": "00:00",
+            "overtime_extra_label": "",
+            "overtime_extra_value": "00:00"
         }
     }
 
@@ -211,6 +345,7 @@ def parse_employee_page(page_text: str, words: list[tuple]) -> dict:
     schedule_map = parse_schedule_map(page_text)
     employee["records"] = parse_day_rows(words, schedule_map)
     employee["summary"]["night_additional_total"] = extract_night_additional_total(words)
+    employee["summary"].update(extract_resumo_fields(words))
 
     for classified in employee["records"]:
         st = classified["status"]

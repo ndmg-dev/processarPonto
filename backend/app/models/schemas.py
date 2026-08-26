@@ -37,6 +37,19 @@ class EmployeeSummary(BaseModel):
     medical_days: int = 0
     inconsistencies: int = 0
     night_additional_total: str = "00:00"
+    normal_hours: str = "00:00"
+    dsr_normal: str = "00:00"
+    weekly_total: str = "00:00"
+    discounted_total: str = "00:00"
+    worked_hours_paid: str = "00:00"
+    dsr_paid: str = "00:00"
+    dsr_discount: str = "00:00"
+    delays: str = "00:00"
+    absences_time: str = "00:00"
+    early_departures: str = "00:00"
+    overtime_50: str = "00:00"
+    overtime_extra_label: str = ""
+    overtime_extra_value: str = "00:00"
 
 class Employee(BaseModel):
     id: str
