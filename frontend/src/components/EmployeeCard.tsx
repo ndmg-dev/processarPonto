@@ -7,7 +7,7 @@ type EmployeeCardProps = {
 };
 
 export function EmployeeCard({ employee, uploadId }: EmployeeCardProps) {
-  const { inconsistencies } = employee.summary;
+  const { inconsistencies, overtime_50, overtime_extra_label, overtime_extra_value } = employee.summary;
 
   return (
     <Link to={`/result/${uploadId}/employee/${employee.id}`} className="block">
@@ -23,7 +23,14 @@ export function EmployeeCard({ employee, uploadId }: EmployeeCardProps) {
           </div>
         </div>
 
-        <div className="mt-4 pt-4 border-t border-border flex justify-between items-center">
+        <div className="mt-4 pt-4 border-t border-border flex justify-between items-center text-sm text-textSecondary">
+          <span><span className="font-semibold text-textPrimary">Hora Extra 50%:</span> {overtime_50}</span>
+          {overtime_extra_label && (
+            <span><span className="font-semibold text-textPrimary">{overtime_extra_label.replace('H.E.', 'Hora Extra')}:</span> {overtime_extra_value}</span>
+          )}
+        </div>
+
+        <div className="mt-3 pt-3 border-t border-border flex justify-between items-center">
           <span className="text-sm text-textSecondary font-medium">{employee.records.length} registros</span>
           {inconsistencies > 0 ? (
             <span className="px-3 py-1 bg-warning/10 text-warning text-xs font-bold rounded-full">

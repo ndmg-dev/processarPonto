@@ -82,6 +82,56 @@ def _summary_cards(summary: dict, total_records: int) -> Table:
     table.setStyle(TableStyle(style_cmds))
     return table
 
+def _hours_summary_table(summary: dict) -> Table:
+    """
+    Recria a tabela "Resumo de Horas" (Horas Normais, DSR, Total Semanal, Tot
+    Descontado, H. Trab./DSR/Atrasos/Faltas/Saídas Antecipadas em Pagos e
+    Desc., H.E. 050% e a segunda linha de hora extra, cujo rótulo varia por
+    colaborador/período) equivalente ao bloco RESUMO do espelho.
+    """
+    styles = getSampleStyleSheet()
+    label_style = ParagraphStyle('HoursLabel', parent=styles['Normal'], fontSize=8.5, textColor=TEXT_DARK)
+    value_style = ParagraphStyle('HoursValue', parent=styles['Normal'], fontSize=8.5, textColor=TEXT_DARK, alignment=2, fontName='Helvetica-Bold')
+
+    def row(label, *values):
+        return [Paragraph(label, label_style)] + [Paragraph(v, value_style) for v in values]
+
+    data = [
+        [Paragraph('Resumo de Horas', label_style), '', '', ''],
+        row('Horas Normais', summary.get('normal_hours', '00:00')),
+        row('DSR Normais', summary.get('dsr_normal', '00:00')),
+        row('Total Semanal', summary.get('weekly_total', '00:00')),
+        row('Adc Noturno', summary.get('night_additional_total', '00:00')),
+        row('Tot Descontado', summary.get('discounted_total', '00:00')),
+        [Paragraph('', label_style), Paragraph('', label_style), Paragraph('Pagos', label_style), Paragraph('Desc.', label_style)],
+        row('H. Trab.', summary.get('worked_hours_paid', '00:00'), ''),
+        row('DSR', summary.get('dsr_paid', '00:00'), summary.get('dsr_discount', '00:00')),
+        row('Atrasos', '', summary.get('delays', '00:00')),
+        row('Faltas', '', summary.get('absences_time', '00:00')),
+        row('Saídas Antecipadas', '', summary.get('early_departures', '00:00')),
+        row('H.E. 050%', summary.get('overtime_50', '00:00')),
+    ]
+    extra_label = summary.get('overtime_extra_label', '')
+    if extra_label:
+        data.append(row(extra_label, summary.get('overtime_extra_value', '00:00')))
+    # Normaliza todas as linhas para 4 colunas (label + até 3 valores).
+    normalized = []
+    for r in data:
+        r = r + [''] * (4 - len(r))
+        normalized.append(r)
+
+    table = Table(normalized, colWidths=[5*cm, 3*cm, 3*cm, 3*cm])
+    table.setStyle(TableStyle([
+        ('SPAN', (0, 0), (-1, 0)),
+        ('BACKGROUND', (0, 0), (-1, 0), GOLD_LIGHT),
+        ('FONTNAME', (0, 0), (0, 0), 'Helvetica-Bold'),
+        ('GRID', (0, 0), (-1, -1), 0.5, BORDER),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    return table
+
 def generate_pdf_report(data: dict, output_path: str) -> str:
     doc = SimpleDocTemplate(
         output_path,
@@ -210,6 +260,8 @@ def generate_pdf_report(data: dict, output_path: str) -> str:
         ))
         story.append(Spacer(1, 0.4*cm))
         story.append(_summary_cards(summary, len(records)))
+        story.append(Spacer(1, 0.6*cm))
+        story.append(_hours_summary_table(summary))
         story.append(Spacer(1, 0.6*cm))
 
         records_data = [["Data", "Ent1", "Sai1", "Ent2", "Sai2", "Oc", "Motivo", "Status"]]

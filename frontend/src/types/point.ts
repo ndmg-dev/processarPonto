@@ -34,6 +34,19 @@ export type EmployeeSummary = {
   medical_days: number;
   inconsistencies: number;
   night_additional_total: string;
+  normal_hours: string;
+  dsr_normal: string;
+  weekly_total: string;
+  discounted_total: string;
+  worked_hours_paid: string;
+  dsr_paid: string;
+  dsr_discount: string;
+  delays: string;
+  absences_time: string;
+  early_departures: string;
+  overtime_50: string;
+  overtime_extra_label: string;
+  overtime_extra_value: string;
 };
 
 export type Employee = {
