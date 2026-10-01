@@ -12,10 +12,16 @@ from app.services.report_generator import generate_pdf_report
 
 app = FastAPI(title="Processar Ponto")
 
-# CORS
+# CORS — restrito às origens de verdade do sistema. CORS_ORIGINS permite
+# sobrescrever por ambiente (ex.: localhost na dev), sem voltar a liberar "*"
+# com allow_credentials=True (essa combinação é proibida pelo browser e, se
+# fosse aceita, deixaria qualquer site ler as respostas autenticadas).
+_default_origins = "https://processarponto.mendoncagalvao.com.br"
+ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Para desenvolvimento
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

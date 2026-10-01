@@ -1,4 +1,5 @@
 import re
+import uuid
 from app.services.classifier import classify_record
 from app.models.schemas import PointStatus
 
@@ -338,9 +339,10 @@ def parse_employee_page(page_text: str, words: list[tuple]) -> dict:
     employee["name"] = extract_labeled_field(lines, ["Funcionário", "Funcionario"])
     employee["cpf"] = extract_labeled_field(lines, ["CPF"])
     employee["role"] = extract_labeled_field(lines, ["Cargo"])
-    # Não há matrícula isolada de forma confiável no espelho; o CPF (único por
-    # colaborador) é usado como identificador.
-    employee["id"] = re.sub(r"\D", "", employee["cpf"]) or employee["name"]
+    # Identificador opaco, sem relação com CPF/nome — ele vira parâmetro de
+    # rota (/result/:uploadId/employee/:employeeId) e não pode carregar dado
+    # pessoal (ia parar em log de acesso, histórico do navegador, etc.).
+    employee["id"] = str(uuid.uuid4())
 
     schedule_map = parse_schedule_map(page_text)
     employee["records"] = parse_day_rows(words, schedule_map)
@@ -370,6 +372,6 @@ def parse_pdf_pages(pages: list[str], pages_words: list[list[tuple]]) -> list[di
         if not page_text.strip():
             continue
         emp_data = parse_employee_page(page_text, words)
-        if emp_data["id"] or emp_data["name"]:
+        if emp_data["name"] or emp_data["cpf"]:
             employees.append(emp_data)
     return employees
