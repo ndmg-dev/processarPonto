@@ -45,7 +45,7 @@ app = FastAPI(title="Processar Ponto", lifespan=lifespan)
 # sobrescrever por ambiente (ex.: localhost na dev), sem voltar a liberar "*"
 # com allow_credentials=True (essa combinação é proibida pelo browser e, se
 # fosse aceita, deixaria qualquer site ler as respostas autenticadas).
-_default_origins = "https://processarponto.mendoncagalvao.com.br"
+_default_origins = "https://processarponto.mendoncagalvao.com.br,https://crmmg.mendoncagalvao.com.br"
 ALLOWED_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", _default_origins).split(",") if o.strip()]
 
 app.add_middleware(
