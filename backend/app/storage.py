@@ -20,9 +20,6 @@ os.makedirs(REPORT_DIR, exist_ok=True)
 @dataclass
 class UploadMeta:
     upload_id: str
-    organizacao_id: str
-    empresa_id: str
-    criado_por: str
     criado_em: float
 
 
