@@ -11,16 +11,19 @@ services:
     # depends_on:
     #   - db
 
-  # db:
-  #   image: postgres:15
-  #   environment:
-  #     POSTGRES_USER: user
-  #     POSTGRES_PASSWORD: password
-  #     POSTGRES_DB: pontodb
-  #   ports:
-  #     - "5432:5432"
-  #   volumes:
-  #     - postgres_data:/var/lib/postgresql/data
+  # db: só para rodar os testes de RLS localmente (db/tests). Não é usado em
+  # produção, onde o Postgres é o do Supabase. Ver db/README.md.
+  db:
+    image: postgres:15
+    profiles: ["test"]
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${TEST_DB_PASSWORD:?defina TEST_DB_PASSWORD antes de subir o banco de teste}
+      POSTGRES_DB: postgres
+    ports:
+      - "${TEST_DB_PORT:-55432}:5432"
+    volumes:
+      - postgres_test_data:/var/lib/postgresql/data
 
   frontend:
     build: ./frontend
@@ -29,5 +32,5 @@ services:
     depends_on:
       - backend
 
-# volumes:
-#   postgres_data:
+volumes:
+  postgres_test_data:
