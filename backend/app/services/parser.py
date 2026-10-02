@@ -1,71 +1,67 @@
 import re
 import uuid
-from app.services.classifier import classify_record
 from app.models.schemas import PointStatus
+from app.services.classifier import classify_day, OCORRENCIAS
 
-CPF_REGEX = r"\d{3}\.\d{3}\.\d{3}-\d{2}"
-TIME_REGEX = r"^\d{2}:\d{2}$"
-# Totais acumulados (ex: "188:00", "012:11") podem ter 3 dígitos de hora.
-TOTAL_TIME_REGEX = r"^\d{2,3}:\d{2}$"
-WEEKDAY_REGEX = r"^(Seg|Ter|Qua|Qui|Sex|Sab|Sáb|Dom)$"
-DATE_REGEX = r"^\d{2}/\d{2}$"
-SCHEDULE_MAP_REGEX = r"(\d{4})\s+-\s+((?:\d{2}:\d{2}\s*)+)"
+# Layout "Acesso Relógio de Ponto Digital v.4.5.153" — ver
+# reestruturacao-processar-ponto.md §2 e §5. As posições abaixo NÃO são
+# faixas fixas: tudo que é coluna de grade/resumo é calibrado a partir das
+# palavras do próprio cabeçalho em cada página, porque pequenas variações de
+# fonte/margem entre páginas (ou entre arquivos) deslocam as coordenadas o
+# suficiente pra quebrar faixas fixas. Faixas fixas foram exatamente a causa
+# da versão anterior deste parser classificar tudo como FALTA.
 
-# Faixas de coordenada X (em pontos) das colunas do "Espelho de Ponto Eletrônico".
-# O texto extraído célula-a-célula não preserva a ordem lógica das colunas,
-# então cada campo do dia é localizado pela posição horizontal na página.
-COL_EXTRA1 = (165, 216)
-COL_PERIOD1 = (216, 270)
-COL_PERIOD2 = (270, 322)
-COL_EXTRA2 = (322, 366)
-COL_SCHEDULE_CODE = (366, 405)
-COL_OCCURRENCE = (505, 533)
-COL_REASON_MIN = 533
+TIME_RE = re.compile(r"^\d{1,2}:\d{2}$")
+TOTAL_TIME_RE = re.compile(r"^-?\d{1,3}:\d{2}$")
+DATE_RE = re.compile(r"^\d{2}/\d{2}$")
+WEEKDAY_RE = re.compile(r"^(Seg|Ter|Qua|Qui|Sex|Sab|S[áa]b|Dom)$", re.IGNORECASE)
+MATRICULA_RE = re.compile(r"^\d{8}$")
 
-NIGHT_ADDITIONAL_VALUE_X = (115, 155)
+SLOT_NAMES = (
+    "extra_before_entry", "extra_before_exit",
+    "first_period_entry", "first_period_exit",
+    "second_period_entry", "second_period_exit",
+    "extra_after_entry", "extra_after_exit",
+)
 
-# Faixas de coordenada X do bloco "RESUMO" no rodapé do espelho. O bloco tem
-# três colunas de rótulo (A, B, C), cada uma com sua(s) coluna(s) de valor à
-# direita, alinhadas por Y com o respectivo rótulo.
-RESUMO_COL_A_LABEL_X = (25, 90)
-RESUMO_COL_A_VALUE_X = (115, 165)
 
-RESUMO_COL_B_LABEL_X = (180, 250)
-RESUMO_COL_B_PAGOS_X = (255, 295)
-RESUMO_COL_B_DESC_X = (295, 330)
+class LayoutError(Exception):
+    """Layout não reconhecido — nunca "tentamos a sorte" com faixas fixas;
+    se o cabeçalho esperado não aparece, paramos com erro explícito."""
 
-RESUMO_COL_C_LABEL_X = (340, 390)
-RESUMO_COL_C_VALUE_X = (385, 420)
 
-def time_to_minutes(time_str: str) -> int:
-    if not time_str:
+def to_minutes(value: str) -> int:
+    if not value:
         return 0
-    hours, minutes = time_str.split(":")
-    return int(hours) * 60 + int(minutes)
+    neg = value.startswith("-")
+    h, m = value.lstrip("-").split(":")
+    total = int(h) * 60 + int(m)
+    return -total if neg else total
 
-def minutes_to_time(total_minutes: int) -> str:
-    hours, minutes = divmod(total_minutes, 60)
-    return f"{hours:02d}:{minutes:02d}"
+
+def minutes_to_time(total: int) -> str:
+    neg = total < 0
+    total = abs(total)
+    h, m = divmod(total, 60)
+    s = f"{h:02d}:{m:02d}"
+    return f"-{s}" if neg else s
+
 
 def clean_text(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
-def parse_schedule_map(text: str) -> dict:
-    schedule_map = {}
-    for line in text.split("\n"):
-        matches = re.findall(SCHEDULE_MAP_REGEX, line)
-        for code, times_str in matches:
-            times = re.findall(r"\d{2}:\d{2}", times_str)
-            schedule_map[code] = times
-    return schedule_map
+
+def _xc(w: tuple) -> float:
+    return (w[0] + w[2]) / 2
+
+
+def _yc(w: tuple) -> float:
+    return (w[1] + w[3]) / 2
+
 
 def extract_labeled_field(lines: list[str], label_variants: list[str]) -> str:
-    """
-    Extrai campos do tipo "Rótulo : Valor" do cabeçalho do espelho de ponto.
-    No PDF, rótulo, ":" e valor às vezes vêm na mesma linha de texto (ex: "CPF :
-    103.077.514-14") e às vezes em linhas separadas (ex: "Funcionário" / ":" /
-    "NOME"), então tentamos os dois formatos.
-    """
+    """Extrai campos "Rótulo : Valor" do cabeçalho — às vezes na mesma linha
+    de texto, às vezes com rótulo/":"/valor em linhas separadas."""
     pattern = "|".join(label_variants)
     for i, line in enumerate(lines):
         cleaned = clean_text(line)
@@ -82,289 +78,285 @@ def extract_labeled_field(lines: list[str], label_variants: list[str]) -> str:
                     return value
     return ""
 
-def extract_night_additional_total(words: list[tuple]) -> str:
-    """
-    O "Adc Noturno" aparece no bloco RESUMO como rótulo ("Adc" + "Noturno") e o
-    valor correspondente fica na mesma altura (y), numa coluna de valores à
-    direita. Quando o total é zero a célula fica em branco e nenhuma palavra é
-    encontrada nessa linha.
-    """
-    label_y = None
-    for w in words:
-        if w[4] == "Adc":
-            label_y = w[1]
-            break
-    if label_y is None:
-        return "00:00"
 
-    for w in words:
-        x0, y0, text = w[0], w[1], w[4]
-        if NIGHT_ADDITIONAL_VALUE_X[0] <= x0 <= NIGHT_ADDITIONAL_VALUE_X[1] and abs(y0 - label_y) < 1.5:
-            if re.match(TOTAL_TIME_REGEX, text):
-                return text
-    return "00:00"
+def find_header_yc(words: list[tuple]) -> float:
+    ini_words = [w for w in words if w[4] == "Ini"]
+    if not ini_words:
+        raise LayoutError("cabeçalho da grade ('Ini') não encontrado")
+    return sum(_yc(w) for w in ini_words) / len(ini_words)
 
-def _extract_field_value(words: list[tuple], label_y: float, value_x_range: tuple, y_tolerance: float = 2.0) -> str:
-    for w in words:
-        x0, y0, text = w[0], w[1], w[4]
-        if value_x_range[0] <= x0 <= value_x_range[1] and abs(y0 - label_y) < y_tolerance:
-            if re.match(TOTAL_TIME_REGEX, text):
-                return text
-    return "00:00"
 
-def _extract_label_text(words: list[tuple], label_y: float, x_range: tuple, y_tolerance: float = 2.0) -> str:
-    """
-    Reconstrói o texto do rótulo (ex: "H.E. 100%", "H.E. A 050%") juntando as
-    palavras da linha dentro da faixa X do rótulo, ignorando o ":" separador.
-    """
-    row_words = [
-        w for w in words
-        if x_range[0] <= w[0] <= x_range[1] and abs(w[1] - label_y) < y_tolerance and w[4] != ":"
-    ]
-    return " ".join(w[4] for w in sorted(row_words, key=lambda w: w[0]))
+def calibrate_columns(words: list[tuple], header_yc: float) -> list[tuple[str, float, float]]:
+    """Deriva as faixas de x da grade diária a partir da posição real das
+    palavras Ini/Fim/Trab/Desc do cabeçalho — nunca de constantes fixas."""
+    names = list(SLOT_NAMES) + ["worked_minutes", "discounted_minutes"]
+    hdr = [w for w in words if w[4] in ("Ini", "Fim", "Trab", "Desc") and abs(_yc(w) - header_yc) < 3]
+    if len(hdr) != len(names):
+        raise LayoutError(
+            f"esperado {len(names)} colunas de cabeçalho (Ini/Fim/Trab/Desc), encontrado {len(hdr)}"
+        )
+    row = sorted(hdr, key=_xc)
+    centers = [_xc(w) for w in row]
+    limites = [(a + b) / 2 for a, b in zip(centers, centers[1:])]
 
-def _find_label_y(words: list[tuple], label_text: str, x_range: tuple, y_min: float = None, y_max: float = None) -> float | None:
-    for w in words:
-        x0, y0, text = w[0], w[1], w[4]
-        if text != label_text:
-            continue
-        if not (x_range[0] <= x0 <= x_range[1]):
-            continue
-        if y_min is not None and y0 < y_min:
-            continue
-        if y_max is not None and y0 > y_max:
-            continue
-        return y0
+    faixas: list[tuple[str, float, float]] = []
+    inicio = 85.0  # abaixo disso ficam só weekday/data, nunca célula de dia
+    for nome, fim in zip(names, [*limites, centers[-1] + 20]):
+        faixas.append((nome, inicio, fim))
+        inicio = fim
+    faixas.append(("quadro", inicio, 10_000.0))
+    return faixas
+
+
+def _col_for(xc: float, faixas: list[tuple[str, float, float]]) -> str | None:
+    for nome, ini, fim in faixas:
+        if ini <= xc < fim:
+            return nome
     return None
 
+
+def _first_time(tokens: list[str]) -> int:
+    for t in tokens:
+        if TOTAL_TIME_RE.match(t):
+            return to_minutes(t)
+    return 0
+
+
+def parse_day_rows(words: list[tuple], faixas: list[tuple[str, float, float]], header_yc: float) -> list[dict]:
+    anchors = [
+        w for w in words
+        if DATE_RE.match(w[4]) and w[0] < 90 and w[1] > header_yc + 5
+    ]
+    records = []
+    for a in sorted(anchors, key=lambda w: w[1]):
+        yc_a = _yc(a)
+
+        weekday = ""
+        for w in words:
+            if w[0] < 45 and abs(_yc(w) - yc_a) < 5 and WEEKDAY_RE.match(w[4]):
+                weekday = w[4]
+                break
+
+        cells: dict[str, list[str]] = {}
+        for w in words:
+            if w is a or w[0] < 85 or abs(_yc(w) - yc_a) >= 3:
+                continue
+            col = _col_for(_xc(w), faixas)
+            if col:
+                cells.setdefault(col, []).append(w[4])
+
+        marcacoes: dict[str, str] = {}
+        ocorrencias: dict[str, str] = {}
+        for slot in SLOT_NAMES:
+            toks = cells.get(slot, [])
+            if not toks:
+                continue
+            val = toks[0]
+            if TIME_RE.match(val):
+                marcacoes[slot] = val
+            elif val in OCORRENCIAS:
+                ocorrencias[slot] = val
+
+        worked_min = _first_time(cells.get("worked_minutes", []))
+        discounted_min = _first_time(cells.get("discounted_minutes", []))
+        quadro_tokens = cells.get("quadro", [])
+
+        classify_input = {
+            "quadro": quadro_tokens,
+            "ocorrencias": ocorrencias,
+            "horas_trab_min": worked_min,
+            "horas_desc_min": discounted_min,
+            "n_marcacoes": len(marcacoes),
+        }
+        status = classify_day(classify_input)
+        lost_weekly_rest = status in (PointStatus.DOMINGO, PointStatus.SABADO) and discounted_min > 0
+
+        record = {slot: marcacoes.get(slot, "") for slot in SLOT_NAMES}
+        record.update({
+            "date": a[4],
+            "weekday": weekday,
+            "occurrence": " ".join(sorted(set(ocorrencias.values()))),
+            "reason": "",
+            "worked_minutes": worked_min,
+            "discounted_minutes": discounted_min,
+            "schedule": quadro_tokens,
+            "status": status,
+            "lost_weekly_rest": lost_weekly_rest,
+        })
+        records.append(record)
+    return records
+
+
 def extract_resumo_fields(words: list[tuple]) -> dict:
-    """
-    Extrai os campos do bloco "RESUMO" no rodapé do espelho de ponto (Horas
-    Normais, DSR Normais, Total Semanal, Tot Descontado, H. Trab./DSR/Atrasos/
-    Faltas/Saídas Antecipadas em Pagos e Desc., H.E. 050% e a segunda linha de
-    hora extra, cujo rótulo varia por colaborador/período: "H.E. A 050%" ou
-    "H.E. 100%"). Assim como o Adc Noturno, cada rótulo tem seu valor correspondente na
-    mesma altura (Y), numa coluna de valores à direita; quando o valor é zero
-    a célula fica em branco e o campo retorna "00:00".
-    """
+    """Bloco RESUMO (rodapé): bloco superior de valor único (Horas Normais,
+    DSR Normais, Total Semanal, Saldo Banc., Adc Noturno, Tot Descontado,
+    Extra A 050/070/100%) e bloco inferior com colunas Pagos/Desc. separadas
+    (H. Trab., DSR, Atrasos, Faltas, Saídas Antecipada). A coluna de cada
+    valor é sempre lida pela coordenada, nunca pela ordem dos tokens —
+    "DSR 07:2022:00" só faz sentido com a posição x de cada parte."""
     fields = {
-        "normal_hours": "00:00",
-        "dsr_normal": "00:00",
-        "weekly_total": "00:00",
-        "discounted_total": "00:00",
-        "worked_hours_paid": "00:00",
-        "dsr_paid": "00:00",
-        "dsr_discount": "00:00",
-        "delays": "00:00",
-        "absences_time": "00:00",
-        "early_departures": "00:00",
-        "overtime_50": "00:00",
-        "overtime_extra_label": "",
-        "overtime_extra_value": "00:00",
+        "normal_hours": "00:00", "dsr_normal": "00:00", "weekly_total": "00:00",
+        "saldo_banco": "00:00", "night_additional_total": "00:00", "discounted_total": "00:00",
+        "worked_hours_paid": "00:00", "dsr_paid": "00:00", "dsr_discount": "00:00",
+        "delays": "00:00", "absences_paid": "00:00", "absences_discounted": "00:00",
+        "early_departures": "00:00", "overtime_50": "00:00", "overtime_70": "00:00", "overtime_100": "00:00",
     }
 
-    resumo_y = None
-    for w in words:
-        if w[4] == "RESUMO":
-            resumo_y = w[1]
-            break
+    resumo_y = next((w[1] for w in words if w[4] == "RESUMO"), None)
     if resumo_y is None:
-        return fields
+        raise LayoutError("bloco 'RESUMO' não encontrado")
+    rw = [w for w in words if w[1] >= resumo_y - 2]
 
-    # Só considera palavras a partir do início do bloco RESUMO, para não
-    # colidir com rótulos homônimos usados em outras partes do espelho.
-    resumo_words = [w for w in words if w[1] >= resumo_y - 2]
+    pagos_x = next((w[0] for w in rw if w[4] == "Pagos"), None)
+    desc_x = next((w[0] for w in rw if w[4] == "Desc."), None)
+    if pagos_x is None or desc_x is None:
+        raise LayoutError("cabeçalho 'Pagos'/'Desc.' do RESUMO não encontrado")
 
-    # Coluna A (rótulo à esquerda / valor único à direita)
-    if (y := _find_label_y(resumo_words, "Horas", RESUMO_COL_A_LABEL_X)) is not None:
-        fields["normal_hours"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
-    if (y := _find_label_y(resumo_words, "DSR", RESUMO_COL_A_LABEL_X)) is not None:
-        fields["dsr_normal"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
-    if (y := _find_label_y(resumo_words, "Total", RESUMO_COL_A_LABEL_X)) is not None:
-        fields["weekly_total"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
-    if (y := _find_label_y(resumo_words, "Tot", RESUMO_COL_A_LABEL_X)) is not None:
-        fields["discounted_total"] = _extract_field_value(resumo_words, y, RESUMO_COL_A_VALUE_X)
+    pagos_y0 = next(w[1] for w in rw if w[4] == "Pagos")
+    upper = [w for w in rw if w[1] < pagos_y0 - 5]
+    lower = [w for w in rw if w[1] >= pagos_y0 - 5]
 
-    # Coluna B (rótulo central / colunas de valor "Pagos" e "Desc." à direita)
-    if (y := _find_label_y(resumo_words, "H.", RESUMO_COL_B_LABEL_X)) is not None:
-        fields["worked_hours_paid"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_PAGOS_X)
-    if (y := _find_label_y(resumo_words, "DSR", RESUMO_COL_B_LABEL_X)) is not None:
-        fields["dsr_paid"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_PAGOS_X)
-        fields["dsr_discount"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
-    if (y := _find_label_y(resumo_words, "Atrasos", RESUMO_COL_B_LABEL_X)) is not None:
-        fields["delays"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
-    if (y := _find_label_y(resumo_words, "Faltas", RESUMO_COL_B_LABEL_X)) is not None:
-        fields["absences_time"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
-    if (y := _find_label_y(resumo_words, "Saídas", RESUMO_COL_B_LABEL_X)) is not None:
-        fields["early_departures"] = _extract_field_value(resumo_words, y, RESUMO_COL_B_DESC_X)
+    col_a_value = 140.0
 
-    # Coluna C (Horas Extras). A primeira linha é sempre "H.E. 050%"; a
-    # segunda linha (quando existe) varia entre "H.E. A 050%" e "H.E. 100%"
-    # conforme o colaborador/período, então o rótulo é lido dinamicamente em
-    # vez de fixado.
-    if (y := _find_label_y(resumo_words, "H.E.", RESUMO_COL_C_LABEL_X)) is not None:
-        fields["overtime_50"] = _extract_field_value(resumo_words, y, RESUMO_COL_C_VALUE_X)
-        if (y2 := _find_label_y(resumo_words, "H.E.", RESUMO_COL_C_LABEL_X, y_min=y + 5)) is not None:
-            fields["overtime_extra_value"] = _extract_field_value(resumo_words, y2, RESUMO_COL_C_VALUE_X)
-            fields["overtime_extra_label"] = _extract_label_text(resumo_words, y2, RESUMO_COL_C_LABEL_X)
+    def value_at(pool: list[tuple], label_text: str, target_x: float, y_tol: float = 2.0, max_dx: float = 30.0):
+        """Pega, na mesma linha do rótulo, o valor numérico mais PRÓXIMO de
+        target_x — nunca o primeiro token "dentro de uma faixa", porque a
+        ordem de leitura do PyMuPDF segue blocos/colunas internos do PDF, não
+        necessariamente esquerda->direita entre as colunas Pagos/Desc."""
+        label_y = next((w[1] for w in pool if w[4] == label_text), None)
+        if label_y is None:
+            return None
+        candidatos = [
+            w for w in pool
+            if abs(w[1] - label_y) < y_tol and TOTAL_TIME_RE.match(w[4])
+        ]
+        if not candidatos:
+            return "00:00"
+        melhor = min(candidatos, key=lambda w: abs(w[0] - target_x))
+        return melhor[4] if abs(melhor[0] - target_x) <= max_dx else "00:00"
+
+    if (v := value_at(upper, "Horas", col_a_value)) is not None:
+        fields["normal_hours"] = v
+    if (v := value_at(upper, "DSR", col_a_value)) is not None:
+        fields["dsr_normal"] = v
+    if (v := value_at(upper, "Total", col_a_value)) is not None:
+        fields["weekly_total"] = v
+    if (v := value_at(upper, "Saldo", col_a_value)) is not None:
+        fields["saldo_banco"] = v
+    if (v := value_at(upper, "Adc", col_a_value)) is not None:
+        fields["night_additional_total"] = v
+    if (v := value_at(upper, "Tot", col_a_value)) is not None:
+        fields["discounted_total"] = v
+
+    if (v := value_at(lower, "H.", pagos_x)) is not None:
+        fields["worked_hours_paid"] = v
+    if (v := value_at(lower, "DSR", pagos_x)) is not None:
+        fields["dsr_paid"] = v
+    if (v := value_at(lower, "DSR", desc_x)) is not None:
+        fields["dsr_discount"] = v
+    if (v := value_at(lower, "Atrasos", desc_x)) is not None:
+        fields["delays"] = v
+    if (v := value_at(lower, "Faltas", pagos_x)) is not None:
+        fields["absences_paid"] = v
+    if (v := value_at(lower, "Faltas", desc_x)) is not None:
+        fields["absences_discounted"] = v
+    if (v := value_at(lower, "Saídas", desc_x)) is not None:
+        fields["early_departures"] = v
+
+    # "Extra A 050%" / "Extra A 070%" / "Extra A 100%" — sempre as mesmas 3
+    # linhas, uma abaixo da outra, no bloco superior.
+    extra_keys = {"050%": "overtime_50", "070%": "overtime_70", "100%": "overtime_100"}
+    a_words = sorted((w for w in upper if w[4] == "A" and 210 <= w[0] <= 232), key=lambda w: w[1])
+    for a_word in a_words:
+        pct_word = next((w for w in upper if w[4] in extra_keys and abs(w[1] - a_word[1]) < 2), None)
+        if not pct_word:
+            continue
+        val = next(
+            (w[4] for w in upper if w[0] > 245 and abs(w[1] - a_word[1]) < 2 and TOTAL_TIME_RE.match(w[4])),
+            "00:00",
+        )
+        fields[extra_keys[pct_word[4]]] = val
 
     return fields
 
-def group_words_into_rows(words: list[tuple], y_tolerance: float = 3.0) -> list[list[tuple]]:
-    sorted_words = sorted(words, key=lambda w: (w[1], w[0]))
-    rows = []
-    current_row = []
-    current_y = None
-    for w in sorted_words:
-        y = w[1]
-        if current_y is None or abs(y - current_y) <= y_tolerance:
-            current_row.append(w)
-            current_y = y if current_y is None else current_y
-        else:
-            rows.append(current_row)
-            current_row = [w]
-            current_y = y
-    if current_row:
-        rows.append(current_row)
-    return rows
-
-def words_in_range(row: list[tuple], x_min: float, x_max: float) -> list[str]:
-    return [w[4] for w in sorted(row, key=lambda w: w[0]) if x_min <= w[0] < x_max]
-
-def entry_exit_from_bucket(texts: list[str]) -> tuple[str, str]:
-    times = [t for t in texts if re.match(TIME_REGEX, t)]
-    entry = times[0] if len(times) >= 1 else ""
-    exit_ = times[1] if len(times) >= 2 else ""
-    return entry, exit_
-
-def parse_day_rows(words: list[tuple], schedule_map: dict) -> list[dict]:
-    rows = group_words_into_rows(words)
-    records = []
-
-    for row in rows:
-        weekday = ""
-        date_str = ""
-        for w in sorted(row, key=lambda w: w[0]):
-            if not weekday and w[0] < 45 and re.match(WEEKDAY_REGEX, w[4]):
-                weekday = w[4]
-            elif not date_str and 45 <= w[0] < 70 and re.match(DATE_REGEX, w[4]):
-                date_str = w[4]
-
-        if not weekday or not date_str:
-            continue
-
-        extra1_texts = words_in_range(row, *COL_EXTRA1)
-        p1_texts = words_in_range(row, *COL_PERIOD1)
-        p2_texts = words_in_range(row, *COL_PERIOD2)
-        extra2_texts = words_in_range(row, *COL_EXTRA2)
-
-        first_entry, first_exit = entry_exit_from_bucket(p1_texts)
-        second_entry, second_exit = entry_exit_from_bucket(p2_texts)
-
-        # Dias inteiros (Folga, Domingo, Férias, Atestado, etc.) aparecem como uma
-        # palavra-chave repetida nas colunas de horário, em vez de horários reais.
-        keyword_texts = [
-            t for t in (extra1_texts + p1_texts + p2_texts + extra2_texts)
-            if not re.match(TIME_REGEX, t)
-        ]
-
-        schedule_code = ""
-        for t in words_in_range(row, *COL_SCHEDULE_CODE):
-            if re.match(r"^\d{4}$", t):
-                schedule_code = t
-                break
-
-        occurrence = " ".join(words_in_range(row, *COL_OCCURRENCE))
-
-        reason_words = [w[4] for w in sorted(row, key=lambda w: w[0]) if w[0] >= COL_REASON_MIN]
-        reason = clean_text(" ".join(reason_words))
-        if not reason and keyword_texts:
-            # Remove repetições (ex: "FOL FOL FOL FOL" -> "FOL")
-            seen = []
-            for kw in keyword_texts:
-                if kw not in seen:
-                    seen.append(kw)
-            reason = " ".join(seen)
-
-        record = {
-            "date": date_str,
-            "weekday": weekday,
-            "first_period_entry": first_entry,
-            "first_period_exit": first_exit,
-            "second_period_entry": second_entry,
-            "second_period_exit": second_exit,
-            "occurrence": occurrence,
-            "reason": reason,
-            "schedule_code": schedule_code,
-        }
-
-        classified = classify_record(record, schedule_map)
-        records.append(classified)
-
-    return records
 
 def parse_employee_page(page_text: str, words: list[tuple]) -> dict:
     lines = page_text.split("\n")
 
-    employee = {
-        "id": "",
-        "name": "",
-        "cpf": "",
-        "role": "",
-        "records": [],
-        "summary": {
-            "worked_days": 0,
-            "days_off": 0,
-            "vacation_days": 0,
-            "absence_days": 0,
-            "medical_days": 0,
-            "inconsistencies": 0,
-            "night_additional_total": "00:00",
-            "normal_hours": "00:00",
-            "dsr_normal": "00:00",
-            "weekly_total": "00:00",
-            "discounted_total": "00:00",
-            "worked_hours_paid": "00:00",
-            "dsr_paid": "00:00",
-            "dsr_discount": "00:00",
-            "delays": "00:00",
-            "absences_time": "00:00",
-            "early_departures": "00:00",
-            "overtime_50": "00:00",
-            "overtime_extra_label": "",
-            "overtime_extra_value": "00:00"
-        }
+    name = extract_labeled_field(lines, ["Funcionário", "Funcionario"])
+    cpf = extract_labeled_field(lines, ["CPF"])
+    role = extract_labeled_field(lines, ["Cargo"])
+    admission = extract_labeled_field(lines, ["Admissão", "Admissao"])
+    sector_raw = extract_labeled_field(lines, ["Setor"])
+    schedule_label = extract_labeled_field(lines, ["Horário", "Horario"])
+
+    sector_code, _, sector_description = sector_raw.partition(" ")
+    if not sector_description:
+        sector_description, sector_code = sector_code, ""
+
+    # A matrícula (8 dígitos) fica na mesma linha do nome, à esquerda dele —
+    # não existe em campo de texto isolado e confiável neste layout.
+    matricula = next(
+        (w[4] for w in words if MATRICULA_RE.match(w[4]) and w[1] < 120),
+        "",
+    )
+
+    if not name and not cpf:
+        # Página sem dados de colaborador — não é erro de layout, só uma
+        # página em branco/intermediária; parse_pdf_pages descarta.
+        return {"name": "", "cpf": ""}
+
+    header_yc = find_header_yc(words)
+    faixas = calibrate_columns(words, header_yc)
+    records = parse_day_rows(words, faixas, header_yc)
+    summary = extract_resumo_fields(words)
+
+    worked_minutes_total = sum(r["worked_minutes"] for r in records)
+    discounted_minutes_total = sum(r["discounted_minutes"] for r in records)
+
+    worked_days = sum(1 for r in records if r["status"] == PointStatus.TRABALHADO)
+    days_off = sum(1 for r in records if r["status"] in (PointStatus.DOMINGO, PointStatus.SABADO))
+    medical_days = sum(1 for r in records if r["status"] in (PointStatus.ATESTADO_INTEGRAL, PointStatus.ATESTADO_PARCIAL))
+    absence_days = sum(1 for r in records if r["status"] in (PointStatus.FALTA_INTEGRAL, PointStatus.FALTA_PARCIAL))
+    inconsistencies = sum(1 for r in records if r["status"] == PointStatus.MARCACAO_IMPAR)
+
+    summary.update({
+        "worked_days": worked_days,
+        "days_off": days_off,
+        "vacation_days": 0,
+        "absence_days": absence_days,
+        "medical_days": medical_days,
+        "inconsistencies": inconsistencies,
+    })
+
+    # Checksums (§6.1) — só calculados e expostos por enquanto; bloquear o
+    # envio quando algum falhar é de uma fase posterior (API/pendências).
+    desc_resumo_total = (
+        to_minutes(summary["dsr_discount"])
+        + to_minutes(summary["delays"])
+        + to_minutes(summary["absences_discounted"])
+        + to_minutes(summary["early_departures"])
+    )
+    checksums = {
+        "ck_trab": to_minutes(summary["worked_hours_paid"]) == worked_minutes_total,
+        "ck_desc": desc_resumo_total == discounted_minutes_total,
     }
 
-    employee["name"] = extract_labeled_field(lines, ["Funcionário", "Funcionario"])
-    employee["cpf"] = extract_labeled_field(lines, ["CPF"])
-    employee["role"] = extract_labeled_field(lines, ["Cargo"])
-    # Identificador opaco, sem relação com CPF/nome — ele vira parâmetro de
-    # rota (/result/:uploadId/employee/:employeeId) e não pode carregar dado
-    # pessoal (ia parar em log de acesso, histórico do navegador, etc.).
-    employee["id"] = str(uuid.uuid4())
+    return {
+        "id": str(uuid.uuid4()),
+        "matricula": matricula,
+        "name": name,
+        "cpf": cpf,
+        "role": role,
+        "sector_code": sector_code,
+        "sector_description": sector_description,
+        "schedule_label": schedule_label,
+        "admission": admission,
+        "records": records,
+        "summary": summary,
+        "checksums": checksums,
+    }
 
-    schedule_map = parse_schedule_map(page_text)
-    employee["records"] = parse_day_rows(words, schedule_map)
-    employee["summary"]["night_additional_total"] = extract_night_additional_total(words)
-    employee["summary"].update(extract_resumo_fields(words))
-
-    for classified in employee["records"]:
-        st = classified["status"]
-        if st in [PointStatus.TRABALHADO, PointStatus.TRABALHADO_PARCIAL, PointStatus.TRABALHADO_COM_OCORRENCIA]:
-            employee["summary"]["worked_days"] += 1
-        elif st in [PointStatus.FOLGA, PointStatus.DOMINGO]:
-            employee["summary"]["days_off"] += 1
-        elif st == PointStatus.FERIAS:
-            employee["summary"]["vacation_days"] += 1
-        elif st == PointStatus.ATESTADO:
-            employee["summary"]["medical_days"] += 1
-        elif st == PointStatus.FALTA:
-            employee["summary"]["absence_days"] += 1
-        elif st == PointStatus.INCONSISTENCIA:
-            employee["summary"]["inconsistencies"] += 1
-
-    return employee
 
 def parse_pdf_pages(pages: list[str], pages_words: list[list[tuple]]) -> list[dict]:
     employees = []
