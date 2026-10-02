@@ -1,29 +1,32 @@
 export type PointStatus =
   | "TRABALHADO"
-  | "TRABALHADO_COM_OCORRENCIA"
-  | "TRABALHADO_PARCIAL"
-  | "FOLGA"
   | "DOMINGO"
-  | "FERIAS"
-  | "ATESTADO"
-  | "FALTA_JUSTIFICADA"
-  | "FALTA"
-  | "SERVICO_EXTERNO"
-  | "INCONSISTENCIA";
+  | "SABADO"
+  | "FERIADO"
+  | "ATESTADO_INTEGRAL"
+  | "ATESTADO_PARCIAL"
+  | "FALTA_INTEGRAL"
+  | "FALTA_PARCIAL"
+  | "MARCACAO_IMPAR";
 
 export type PointRecord = {
   date: string;
   weekday: string;
+  extra_before_entry: string;
+  extra_before_exit: string;
   first_period_entry: string;
   first_period_exit: string;
   second_period_entry: string;
   second_period_exit: string;
+  extra_after_entry: string;
+  extra_after_exit: string;
   occurrence: string;
   reason: string;
-  night_additional: string;
+  worked_minutes: number;
+  discounted_minutes: number;
+  schedule: string[];
   status: PointStatus;
-  requires_second_period: boolean;
-  has_missing_required_mark: boolean;
+  lost_weekly_rest: boolean;
 };
 
 export type EmployeeSummary = {
@@ -37,30 +40,47 @@ export type EmployeeSummary = {
   normal_hours: string;
   dsr_normal: string;
   weekly_total: string;
+  saldo_banco: string;
   discounted_total: string;
   worked_hours_paid: string;
   dsr_paid: string;
   dsr_discount: string;
   delays: string;
-  absences_time: string;
+  absences_paid: string;
+  absences_discounted: string;
   early_departures: string;
   overtime_50: string;
-  overtime_extra_label: string;
-  overtime_extra_value: string;
+  overtime_70: string;
+  overtime_100: string;
+};
+
+export type Checksums = {
+  ck_trab: boolean;
+  ck_desc: boolean;
 };
 
 export type Employee = {
   id: string;
+  matricula: string;
   name: string;
   cpf: string;
   role: string;
+  sector_code: string;
+  sector_description: string;
+  schedule_label: string;
+  admission: string;
   records: PointRecord[];
   summary: EmployeeSummary;
+  checksums: Checksums;
 };
 
 export type UploadResult = {
   upload_id: string;
   file_name: string;
   total_employees: number;
+  company_name: string;
+  company_cnpj: string;
+  period_start: string;
+  period_end: string;
   employees: Employee[];
 };

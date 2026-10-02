@@ -7,15 +7,20 @@ type RecordsTableProps = {
 export function RecordsTable({ records }: RecordsTableProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'INCONSISTENCIA':
+      case 'MARCACAO_IMPAR':
         return 'bg-warning/10 text-warning border-warning/30';
-      case 'FALTA':
+      case 'FALTA_INTEGRAL':
+      case 'FALTA_PARCIAL':
         return 'bg-error/10 text-error border-error/30';
       case 'TRABALHADO':
-      case 'TRABALHADO_PARCIAL':
         return 'bg-success/10 text-success border-success/30';
-      case 'TRABALHADO_COM_OCORRENCIA':
+      case 'ATESTADO_INTEGRAL':
+      case 'ATESTADO_PARCIAL':
+      case 'FERIADO':
         return 'bg-goldDim text-primary border-gold/30';
+      case 'DOMINGO':
+      case 'SABADO':
+        return 'bg-info/10 text-info border-info/30';
       default:
         return 'bg-hover text-textSecondary border-border';
     }

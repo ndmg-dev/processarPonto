@@ -53,6 +53,9 @@ export function EmployeeDetailPage() {
                 <Briefcase size={18} />
                 <span>Cargo: {employee.role}</span>
               </div>
+              {employee.matricula && <span>Matrícula: {employee.matricula}</span>}
+              {employee.sector_description && <span>Setor: {employee.sector_description}</span>}
+              {employee.schedule_label && <span>Horário: {employee.schedule_label}</span>}
             </div>
           </div>
 
@@ -99,15 +102,15 @@ export function EmployeeDetailPage() {
             <SummaryPairRow label="H. Trab." paid={summary.worked_hours_paid} />
             <SummaryPairRow label="DSR" paid={summary.dsr_paid} discount={summary.dsr_discount} />
             <SummaryPairRow label="Atrasos" discount={summary.delays} />
-            <SummaryPairRow label="Faltas" discount={summary.absences_time} />
+            <SummaryPairRow label="Faltas" paid={summary.absences_paid} discount={summary.absences_discounted} />
             <SummaryPairRow label="Saídas Antecipadas" discount={summary.early_departures} />
           </div>
 
           <div className="bg-card rounded-2xl shadow-sm border border-border p-5 space-y-3">
+            <SummaryRow label="Saldo Banco" value={summary.saldo_banco} />
             <SummaryRow label="H.E. 050%" value={summary.overtime_50} />
-            {summary.overtime_extra_label && (
-              <SummaryRow label={summary.overtime_extra_label} value={summary.overtime_extra_value} />
-            )}
+            <SummaryRow label="H.E. 070%" value={summary.overtime_70} />
+            <SummaryRow label="H.E. 100%" value={summary.overtime_100} />
           </div>
         </div>
       </div>
