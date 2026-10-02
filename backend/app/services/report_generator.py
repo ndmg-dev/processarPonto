@@ -19,11 +19,13 @@ TEXT_MUTED = colors.HexColor('#6b6b6b')
 BORDER = colors.HexColor('#d9d9d9')
 
 STATUS_ROW_COLOR = {
-    PointStatus.INCONSISTENCIA: WARNING_LIGHT,
-    PointStatus.FALTA: ERROR_LIGHT,
+    PointStatus.MARCACAO_IMPAR: WARNING_LIGHT,
+    PointStatus.FALTA_INTEGRAL: ERROR_LIGHT,
+    PointStatus.FALTA_PARCIAL: ERROR_LIGHT,
     PointStatus.TRABALHADO: SUCCESS_LIGHT,
-    PointStatus.TRABALHADO_PARCIAL: SUCCESS_LIGHT,
-    PointStatus.TRABALHADO_COM_OCORRENCIA: GOLD_LIGHT,
+    PointStatus.ATESTADO_INTEGRAL: GOLD_LIGHT,
+    PointStatus.ATESTADO_PARCIAL: GOLD_LIGHT,
+    PointStatus.FERIADO: GOLD_LIGHT,
 }
 
 def _night_additional_to_minutes(value: str) -> int:
@@ -107,13 +109,13 @@ def _hours_summary_table(summary: dict) -> Table:
         row('H. Trab.', summary.get('worked_hours_paid', '00:00'), ''),
         row('DSR', summary.get('dsr_paid', '00:00'), summary.get('dsr_discount', '00:00')),
         row('Atrasos', '', summary.get('delays', '00:00')),
-        row('Faltas', '', summary.get('absences_time', '00:00')),
+        row('Faltas', summary.get('absences_paid', '00:00'), summary.get('absences_discounted', '00:00')),
         row('Saídas Antecipadas', '', summary.get('early_departures', '00:00')),
+        row('Saldo Banco', summary.get('saldo_banco', '00:00')),
         row('H.E. 050%', summary.get('overtime_50', '00:00')),
+        row('H.E. 070%', summary.get('overtime_70', '00:00')),
+        row('H.E. 100%', summary.get('overtime_100', '00:00')),
     ]
-    extra_label = summary.get('overtime_extra_label', '')
-    if extra_label:
-        data.append(row(extra_label, summary.get('overtime_extra_value', '00:00')))
     # Normaliza todas as linhas para 4 colunas (label + até 3 valores).
     normalized = []
     for r in data:
