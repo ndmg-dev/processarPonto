@@ -7,3 +7,5 @@ pdfplumber
 pandas
 reportlab
 python-dotenv
+asyncpg
+pyjwt
