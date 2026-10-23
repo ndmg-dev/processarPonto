@@ -359,11 +359,18 @@ def parse_employee_page(page_text: str, words: list[tuple]) -> dict:
 
 
 def parse_pdf_pages(pages: list[str], pages_words: list[list[tuple]]) -> list[dict]:
+    # Import aqui dentro, não no topo do arquivo: parser_rep.py importa
+    # várias coisas DESTE módulo, então importar no topo criaria um ciclo.
+    from app.services.parser_rep import is_rep_layout, parse_employee_page_rep
+
     employees = []
     for page_text, words in zip(pages, pages_words):
         if not page_text.strip():
             continue
-        emp_data = parse_employee_page(page_text, words)
+        if is_rep_layout(words):
+            emp_data = parse_employee_page_rep(page_text, words)
+        else:
+            emp_data = parse_employee_page(page_text, words)
         if emp_data["name"] or emp_data["cpf"]:
             employees.append(emp_data)
     return employees

@@ -26,6 +26,7 @@ STATUS_ROW_COLOR = {
     PointStatus.ATESTADO_INTEGRAL: GOLD_LIGHT,
     PointStatus.ATESTADO_PARCIAL: GOLD_LIGHT,
     PointStatus.FERIADO: GOLD_LIGHT,
+    PointStatus.FERIAS: GOLD_LIGHT,
 }
 
 def _night_additional_to_minutes(value: str) -> int:
