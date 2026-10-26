@@ -122,10 +122,25 @@ async def upload_file(file: UploadFile = File(...)):
         if os.path.exists(tmp_pdf_path):
             os.remove(tmp_pdf_path)
 
+    # company_name/cnpj/período vêm repetidos em toda página (um por
+    # colaborador) só quando o layout os extrai (ver parser_rep.py) — o
+    # layout original ainda não os extrai. Promove pro nível do upload e
+    # tira dos dicts de colaborador, que não têm esses campos no schema.
+    company_name = company_cnpj = period_start = period_end = ""
+    for emp in employees:
+        company_name = company_name or emp.pop("company_name", "")
+        company_cnpj = company_cnpj or emp.pop("company_cnpj", "")
+        period_start = period_start or emp.pop("period_start", "")
+        period_end = period_end or emp.pop("period_end", "")
+
     result = {
         "upload_id": upload_id,
         "file_name": file.filename,
         "total_employees": len(employees),
+        "company_name": company_name,
+        "company_cnpj": company_cnpj,
+        "period_start": period_start,
+        "period_end": period_end,
         "employees": employees,
     }
     storage.save(upload_id, storage.UploadMeta(upload_id=upload_id, criado_em=time.time()), result)

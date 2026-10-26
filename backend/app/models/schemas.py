@@ -15,6 +15,9 @@ class PointStatus(str, Enum):
     FALTA_INTEGRAL = "FALTA_INTEGRAL"
     FALTA_PARCIAL = "FALTA_PARCIAL"
     MARCACAO_IMPAR = "MARCACAO_IMPAR"
+    # Só aparece no layout "Marcações Reg. no REP" (parser_rep.py) — o
+    # layout original não tem um dia de férias explícito no arquivo.
+    FERIAS = "FERIAS"
 
 class PointRecord(BaseModel):
     date: str

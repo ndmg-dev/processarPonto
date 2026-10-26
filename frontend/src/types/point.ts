@@ -7,7 +7,8 @@ export type PointStatus =
   | "ATESTADO_PARCIAL"
   | "FALTA_INTEGRAL"
   | "FALTA_PARCIAL"
-  | "MARCACAO_IMPAR";
+  | "MARCACAO_IMPAR"
+  | "FERIAS";
 
 export type PointRecord = {
   date: string;

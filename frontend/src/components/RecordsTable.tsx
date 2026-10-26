@@ -17,6 +17,7 @@ export function RecordsTable({ records }: RecordsTableProps) {
       case 'ATESTADO_INTEGRAL':
       case 'ATESTADO_PARCIAL':
       case 'FERIADO':
+      case 'FERIAS':
         return 'bg-goldDim text-primary border-gold/30';
       case 'DOMINGO':
       case 'SABADO':
