@@ -362,12 +362,15 @@ def parse_pdf_pages(pages: list[str], pages_words: list[list[tuple]]) -> list[di
     # Import aqui dentro, não no topo do arquivo: parser_rep.py importa
     # várias coisas DESTE módulo, então importar no topo criaria um ciclo.
     from app.services.parser_rep import is_rep_layout, parse_employee_page_rep
+    from app.services.parser_cartao_ponto import is_cartao_ponto_layout, parse_employee_page_cartao
 
     employees = []
     for page_text, words in zip(pages, pages_words):
         if not page_text.strip():
             continue
-        if is_rep_layout(words):
+        if is_cartao_ponto_layout(words):
+            emp_data = parse_employee_page_cartao(page_text, words)
+        elif is_rep_layout(words):
             emp_data = parse_employee_page_rep(page_text, words)
         else:
             emp_data = parse_employee_page(page_text, words)
